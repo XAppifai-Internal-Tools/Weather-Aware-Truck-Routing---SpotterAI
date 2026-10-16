@@ -1,36 +1,88 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Weather-Aware Truck Routing
 
-## Getting Started
+Helps a truck driver pick the safest route based on weather along the way, load weight and travel time.
 
-First, run the development server:
+- **Frontend:** Next.js (React) + Leaflet, in `app/`
+- **Backend:** Django, in `backend/`
+- **Free APIs, no keys needed:** OSRM (routes), Nominatim (geocoding), Open-Meteo (hourly forecast)
+
+## Run it
+
+Backend (Python 3.10 or newer; on macOS the built-in Python 3.9 is too old, `uv venv --python 3.12 .venv` works):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python manage.py runserver 8000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Frontend (in another terminal):
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open http://localhost:3000. Next.js forwards `/api/*` to Django on port 8000.
 
-## Learn More
+## Tests
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cd backend && .venv/bin/python manage.py test
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## How it works
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Origin and destination are geocoded, and OSRM returns up to 3 routes. If it gives fewer, a detour
+   point beside the direct line is added to get another real alternative.
+2. Checkpoints are placed every 10, 25 or 50 miles (your choice), plus the start and the end. Each
+   checkpoint's ETA comes from OSRM's drive time for each road segment, counted from the departure time.
+3. The hourly forecast at each checkpoint's ETA (rounded to the nearest hour) gives wind (mph), rain and
+   snow (in/hr). Each is rated with the risk table, then the load rules are applied to wind:
 
-## Deploy on Vercel
+   | Condition | Low | Moderate | High | Severe | No Travel |
+   |-----------|-----|----------|------|--------|-----------|
+   | Wind | <25 mph | 25–34 | 35–44 | 45–54 | ≥55 mph |
+   | Rain | <0.10 in/hr | 0.10–0.25 | 0.25–0.50 | 0.50–1.00 | >1.00 |
+   | Snow | <0.5 in/hr | 0.5–1.0 | 1.0–2.0 | 2.0–3.0 | >3.0 |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   - 45–54 mph with a load over 30,000 lb is No Travel
+   - 35–44 mph with a load over 40,000 lb is Severe
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   A checkpoint's risk is the worst of the three. Each checkpoint covers the road halfway to its
+   neighbours, so the route's "severe miles", "high miles" and average risk are weighted by distance.
+4. The recommended route has the fewest No Travel miles, then the fewest Severe miles, then the fewest
+   High miles, then the lowest average risk, then the shortest travel time.
+5. The heatmap is a grid of cells along the trip corridor, rated with the same rules for every hour from
+   departure to 48 hours after. The slider picks the hour.
+
+## Project layout
+
+```
+app/
+  page.tsx                  page layout and state
+  components/TripForm.tsx   origin, destination, departure, load, interval
+  components/RouteList.tsx  route summaries and the checkpoint table
+  components/RouteMap.tsx   routes, checkpoints and heatmap on the map
+  components/ForecastSlider.tsx  0–48 h heatmap slider and legend
+  format.ts                 risk colours, labels, time formatting
+  types.ts                  shapes returned by the API
+
+backend/planner/
+  views.py        POST /api/plan, puts everything together
+  geocode.py      place name to coordinates
+  routes.py       3 route options from OSRM
+  checkpoints.py  checkpoints and ETAs along a route
+  weather.py      hourly forecast from Open-Meteo
+  risk.py         risk table and load rules
+  ranking.py      route totals and the recommendation
+  heatmap.py      grid cells along the corridor
+  tests/          one test file per module
+```
+
+## Notes
+
+- Drive times come from OSRM's car profile, so real truck times can be a little longer.
+- Open-Meteo forecasts cover about 16 days, so the trip has to fit inside that window.
+- Open-Meteo's free tier has a per-minute limit. Planning many long trips back to back may need a short wait.
