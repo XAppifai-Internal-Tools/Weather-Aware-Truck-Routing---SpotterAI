@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
-from planner.routes import detour_point, parse_route, three_routes
+from planner.routes import detour_point, doubles_back, parse_route, three_routes
 
 OSRM_ROUTE = {
     "distance": 16093.44,
@@ -27,10 +27,22 @@ class DetourTests(SimpleTestCase):
         self.assertEqual(detour_point((40, -90), (40, -80), -0.2), (42, -85))
 
 
+class DoublesBackTests(SimpleTestCase):
+    def test_side_trip_is_detected(self):
+        out = [[0, i] for i in range(200)]
+        self.assertTrue(doubles_back({"coords": out + out[-2::-1][:10]}))
+        self.assertFalse(doubles_back({"coords": out}))
+
+
+def road(miles, spur=False):
+    coords = [[miles, i] for i in range(100)]
+    return {"miles": miles, "coords": coords + coords[-2:-5:-1] if spur else coords}
+
+
 class ThreeRoutesTests(SimpleTestCase):
     @patch("planner.routes.fetch_routes")
     def test_adds_detours_until_three(self, fetch):
-        fetch.side_effect = [[{"miles": 100}, {"miles": 110}], [{"miles": 100.5}], [{"miles": 125}]]
+        fetch.side_effect = [[road(100), road(110)], [road(100.5)], [road(130, spur=True)], [road(125)]]
         self.assertEqual([r["miles"] for r in three_routes((40, -90), (41, -89))], [100, 110, 125])
 
     @patch("planner.routes.fetch_routes")

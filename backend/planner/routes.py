@@ -38,15 +38,21 @@ def detour_point(start, end, offset):
     return mid_lat - (end[1] - start[1]) * offset, mid_lon + (end[0] - start[0]) * offset
 
 
+def doubles_back(route):
+    """True when the route drives the same road twice, like a side trip out to the detour point and back."""
+    points = [tuple(p) for p in route["coords"]]
+    return len(set(points)) < 0.995 * len(points)
+
+
 def three_routes(start, end):
     routes = fetch_routes([start, end], alternatives=True)
-    for offset in (0.15, -0.15, 0.3, -0.3):
+    for offset in (0.15, -0.15, 0.3, -0.3, 0.45, -0.45):
         if len(routes) >= 3:
             break
         try:
             route = fetch_routes([start, detour_point(start, end, offset), end])[0]
         except ValueError:
             continue
-        if all(abs(route["miles"] - other["miles"]) > 1 for other in routes):
+        if not doubles_back(route) and all(abs(route["miles"] - other["miles"]) > 1 for other in routes):
             routes.append(route)
     return routes[:3]
