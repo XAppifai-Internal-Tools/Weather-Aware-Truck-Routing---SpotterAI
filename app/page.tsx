@@ -1,69 +1,53 @@
-import Image from "next/image";
+"use client";
+
+import dynamic from "next/dynamic";
+import { useState } from "react";
+import ForecastSlider from "./components/ForecastSlider";
+import RouteList from "./components/RouteList";
+import type { Plan, Trip } from "./types";
+
+const TripForm = dynamic(() => import("./components/TripForm"), { ssr: false });
+const RouteMap = dynamic(() => import("./components/RouteMap"), { ssr: false });
 
 export default function Home() {
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [selected, setSelected] = useState(0);
+  const [hour, setHour] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function planTrip(trip: Trip) {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/plan", { method: "POST", body: JSON.stringify(trip) });
+      const data = await response.json().catch(() => ({ error: "Backend is not reachable" }));
+      if (!response.ok) throw new Error(data.error);
+      setPlan(data);
+      setSelected(data.best);
+      setHour(0);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    }
+    setLoading(false);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <main className="flex h-screen flex-col md:flex-row">
+      <aside className="w-full space-y-4 overflow-y-auto p-4 md:w-[400px]">
+        <h1 className="text-lg font-semibold">Weather-Aware Truck Routing</h1>
+        <TripForm loading={loading} onSubmit={planTrip} />
+        {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+        {plan && <RouteList plan={plan} selected={selected} onSelect={setSelected} />}
+      </aside>
+      <section className="relative min-h-[400px] flex-1">
+        <RouteMap plan={plan} selected={selected} hour={hour} onSelect={setSelected} />
+        {plan && (
+          <div className="absolute bottom-6 left-1/2 z-[1000] w-[min(480px,90%)] -translate-x-1/2">
+            <ForecastSlider start={plan.heatmap.start} hour={hour} onChange={setHour} />
+          </div>
+        )}
+      </section>
+    </main>
   );
 }
