@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: weather-aware-truck-routing
+    name: weather-aware-truck-routing-spotterai
     runtime: docker
     plan: free
     healthCheckPath: /
