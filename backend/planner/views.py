@@ -77,7 +77,9 @@ def plan(request):
         origin, destination, departure, weight, interval = read_trip(request.body)
         routes = plan_routes(origin, destination, departure, weight, interval)
         heatmap = plan_heatmap(routes, departure, weight)
-    except (KeyError, TypeError, ValueError) as error:
+    except KeyError as error:
+        return JsonResponse({"error": f"Missing {error.args[0]}"}, status=400)
+    except (TypeError, ValueError) as error:
         return JsonResponse({"error": str(error) or "Invalid trip details"}, status=400)
     except requests.RequestException:
         return JsonResponse({"error": "A map or weather service did not respond, try again"}, status=502)
