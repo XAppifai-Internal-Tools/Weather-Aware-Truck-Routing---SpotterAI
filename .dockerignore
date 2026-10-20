@@ -1,0 +1,6 @@
+.git
+.next
+node_modules
+backend/.venv
+**/__pycache__
+.claude

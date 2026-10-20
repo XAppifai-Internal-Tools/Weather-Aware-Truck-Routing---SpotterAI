@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     agentFeedback: true,
+    proxyTimeout: 90_000,
   },
   cacheComponents: true,
   partialPrefetching: true,
